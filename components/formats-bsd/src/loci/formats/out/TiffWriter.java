@@ -69,6 +69,8 @@ public class TiffWriter extends FormatWriter {
     CompressionType.JPEG.getCompression();
   public static final String COMPRESSION_ZLIB =
     CompressionType.ZLIB.getCompression();
+  public static final String COMPRESSION_JETRAW =
+    CompressionType.JETRAW.getCompression();
 
   private static final String[] BIG_TIFF_SUFFIXES = {"tf2", "tf8", "btf"};
 
@@ -130,6 +132,9 @@ public class TiffWriter extends FormatWriter {
     else if (compression.equals(COMPRESSION_ZLIB)) {
       compressType = TiffCompression.DEFLATE;
     }
+    else if (compression.equals(COMPRESSION_JETRAW)) {
+      compressType = TiffCompression.JETRAW;
+    }
     Object v = ifd.get(new Integer(IFD.COMPRESSION));
     if (v == null)
       ifd.put(new Integer(IFD.COMPRESSION), compressType.getCode());
@@ -150,7 +155,8 @@ public class TiffWriter extends FormatWriter {
       COMPRESSION_J2K,
       COMPRESSION_J2K_LOSSY,
       COMPRESSION_JPEG,
-      COMPRESSION_ZLIB
+      COMPRESSION_ZLIB,
+      COMPRESSION_JETRAW
     };
     isBigTiff = false;
   }
