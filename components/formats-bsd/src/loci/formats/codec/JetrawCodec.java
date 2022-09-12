@@ -33,13 +33,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import loci.common.RandomAccessInputStream;
-import loci.common.services.DependencyException;
-import loci.common.services.ServiceFactory;
 import loci.formats.FormatException;
-import loci.formats.FormatTools;
 import loci.formats.MissingLibraryException;
-import loci.formats.UnsupportedCompressionException;
 
 /**
  */
@@ -60,7 +58,7 @@ public class JetrawCodec extends BaseCodec {
     return libraryName;
   }
 
-  // load jetraw jni dll from jar file
+  // load jetraw JNI dynamic library from JAR file
   private void loadLib(String name) throws MissingLibraryException {
     System.out.println("[INFO] loading JNI Jetraw library.");
     InputStream in = JetrawCodec.class.getResourceAsStream(name);
@@ -82,15 +80,45 @@ public class JetrawCodec extends BaseCodec {
     }
   }
 
-  public native int performDecoding(byte[] buf, int bufSize, short[] out, int outSize);
-  // -- Fields --
+  // -- Native JNI calls --
+  
+  public native int dpcoreInit();
+  public native int performPreparation(short[] buf, long imgsize, String identifier, float error_bound);
+  public native int performEncoding(short[] buf, int width, int height, byte[] out);
+  public native void performDecoding(byte[] buf, int bufSize, short[] out, int outSize);
 
   // -- Codec API methods --
 
   /* @see Codec#compress(byte[], CodecOptions) */
   @Override
   public byte[] compress(byte[] data, CodecOptions options) throws FormatException {
-    throw new UnsupportedCompressionException("Jetraw compression not supported");
+    //throw new UnsupportedCompressionException("Jetraw compression not supported");
+    loadLib(getJetrawLibraryName());
+
+    dpcoreInit();
+    
+    int width = options.width;
+    int height = options.height;
+    int pixels = width * height;
+
+    short[] sourceBuf = new short[pixels];
+
+    if (options.littleEndian) {
+      ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(sourceBuf);
+    } else {
+      ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN).asShortBuffer().get(sourceBuf);
+    }
+
+    int destLen = (int) (pixels*0.5);
+    byte[] outBuf = new byte[destLen];
+
+    System.out.println("[INFO] going to prepare image.");
+    int status = performPreparation(sourceBuf, pixels, "000391_standard", 1.0f);
+    System.out.println("[INFO] preparation exited with status = " + String.valueOf(status));
+    status = performEncoding(sourceBuf, width, height, outBuf);
+    System.out.println("[INFO] encoding exited with status = " + String.valueOf(status));
+
+    return outBuf;
   }
 
   /* @see Codec#decompress(RandomAccessInputStream, CodecOptions) */
