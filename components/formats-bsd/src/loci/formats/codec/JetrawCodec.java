@@ -35,6 +35,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
+import java.util.Arrays;
+import java.util.Locale;
 import loci.common.RandomAccessInputStream;
 import loci.formats.FormatException;
 import loci.formats.MissingLibraryException;
@@ -43,6 +46,8 @@ import loci.formats.MissingLibraryException;
  */
 public class JetrawCodec extends BaseCodec {
 
+  private static boolean isInitialized = false;
+
   private String getJetrawLibraryName() throws MissingLibraryException {
     String operatingSystem = System.getProperty("os.name").toLowerCase();
     String libraryName = "";
@@ -50,6 +55,8 @@ public class JetrawCodec extends BaseCodec {
         libraryName = "jetraw_bioformats_plugin.dll";
     } else if (operatingSystem.contains("mac")) {
         libraryName = "libjetraw_bioformats_plugin.dylib";
+        // FIXME: apparently needed in macOS
+        Locale.setDefault(new Locale("en", "US"));
     } else if (operatingSystem.contains("nix") || operatingSystem.contains("nux") || operatingSystem.contains("aix")) {
         libraryName = "libjetraw_bioformats_plugin.so";
     } else {
@@ -60,7 +67,7 @@ public class JetrawCodec extends BaseCodec {
 
   // load jetraw JNI dynamic library from JAR file
   private void loadLib(String name) throws MissingLibraryException {
-    System.out.println("[INFO] loading JNI Jetraw library.");
+    LOGGER.debug("[JETRAW] loading JNI Jetraw library.");
     InputStream in = JetrawCodec.class.getResourceAsStream(name);
     byte[] buffer = new byte[1024];
     int read = -1;
@@ -74,10 +81,32 @@ public class JetrawCodec extends BaseCodec {
         fos.close();
         in.close();
         System.load(temp.getAbsolutePath());
-        System.out.println("[INFO] JNI Jetraw library loaded successfully.");
+        LOGGER.debug("[JETRAW] JNI Jetraw library loaded successfully.");
     } catch (Exception e) {
         throw new MissingLibraryException("JNI Jetraw library not available", e);
     }
+    // initialize dpcore
+    dpcoreInit();
+    isInitialized = true;
+  }
+
+  private byte[] convertShortArrayToByteArray(short[] shortBuffer, CodecOptions options) {
+    int pixels = options.width*options.height;
+    // convert short buffer into a byte buffer
+    int short_index = 0;
+    int byte_index = 0;
+    byte[] byteBuf = new byte[2*pixels];
+    for(/*NOP*/; short_index != pixels; /*NOP*/) {
+      if (options.littleEndian) {
+        byteBuf[byte_index]     = (byte) (shortBuffer[short_index] & 0x00FF);
+        byteBuf[byte_index + 1] = (byte) ((shortBuffer[short_index] & 0xFF00) >> 8);
+      } else {
+        byteBuf[byte_index]     = (byte) ((shortBuffer[short_index] & 0xFF00) >> 8);
+        byteBuf[byte_index + 1] = (byte) (shortBuffer[short_index] & 0x00FF);
+      }
+      ++short_index; byte_index += 2;
+    }
+    return byteBuf;
   }
 
   // -- Native JNI calls --
@@ -91,70 +120,54 @@ public class JetrawCodec extends BaseCodec {
 
   /* @see Codec#compress(byte[], CodecOptions) */
   @Override
-  public byte[] compress(byte[] data, CodecOptions options) throws FormatException {
-    //throw new UnsupportedCompressionException("Jetraw compression not supported");
-    loadLib(getJetrawLibraryName());
-
-    dpcoreInit();
+  public byte[] compress(byte[] data, CodecOptions options) throws MissingLibraryException, FormatException {
+    if (!isInitialized) {
+      // load JNI library
+      loadLib(getJetrawLibraryName());
+    }
     
-    int width = options.width;
-    int height = options.height;
-    int pixels = width * height;
+    // create short buffer for input image
+    int pixels = options.width*options.height;
+    short[] inputBuffer = new short[pixels];
 
-    short[] sourceBuf = new short[pixels];
-
+    // convert input image data (byte[]) into expected short[] by Jetraw
     if (options.littleEndian) {
-      ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(sourceBuf);
+      ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(inputBuffer);
     } else {
-      ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN).asShortBuffer().get(sourceBuf);
+      ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN).asShortBuffer().get(inputBuffer);
     }
 
-    int destLen = (int) (pixels*0.5);
-    byte[] outBuf = new byte[destLen];
+    LOGGER.debug("[JETRAW] preparation using identifier: " + options.jetrawIdentifier);
+    byte[] encodedBuffer = new byte[(int)(pixels*0.5)];
+    int status = performPreparation(inputBuffer, pixels, options.jetrawIdentifier, 1.0f);
+    LOGGER.debug("[JETRAW] preparation exited with status: " + String.valueOf(status));
+    int imageLength = performEncoding(inputBuffer, options.width, options.height, encodedBuffer);
+    LOGGER.debug("[JETRAW] encoding exited with image length: " + String.valueOf(imageLength));
 
-    System.out.println("[INFO] going to prepare image.");
-    int status = performPreparation(sourceBuf, pixels, "000391_standard", 1.0f);
-    System.out.println("[INFO] preparation exited with status = " + String.valueOf(status));
-    status = performEncoding(sourceBuf, width, height, outBuf);
-    System.out.println("[INFO] encoding exited with status = " + String.valueOf(status));
-
-    return outBuf;
+    // FIXME: find a way to optimize this extra copy
+    return Arrays.copyOfRange(encodedBuffer, 0, imageLength);
   }
 
   /* @see Codec#decompress(RandomAccessInputStream, CodecOptions) */
   @Override
   public byte[] decompress(RandomAccessInputStream in, CodecOptions options) throws FormatException, IOException {
-    byte[] buf = new byte[(int) in.length()];
-    in.read(buf);
-    return decompress(buf, options);
+    byte[] inputBuffer = new byte[(int) in.length()];
+    in.read(inputBuffer);
+    return decompress(inputBuffer, options);
   }
 
   @Override
-  public byte[] decompress(byte[] buf, CodecOptions options) throws FormatException {
-    // load jetraw native library
-    loadLib(getJetrawLibraryName());
-
-    int pixels = options.width*options.height;
-    short[] decomp = new short[pixels];
-    
-    // native call encode buffer with Jetraw
-    performDecoding(buf, buf.length, decomp, pixels);
-
-    int short_index = 0;
-    int byte_index = 0;
-    byte[] byteBuf = new byte[2*pixels];
-    // convert short buffer into a byte buffer
-    for(/*NOP*/; short_index != pixels; /*NOP*/) {
-        if (options.littleEndian == true) {
-            byteBuf[byte_index]     = (byte) (decomp[short_index] & 0x00FF);
-            byteBuf[byte_index + 1] = (byte) ((decomp[short_index] & 0xFF00) >> 8);
-        } else {
-            byteBuf[byte_index]     = (byte) ((decomp[short_index] & 0xFF00) >> 8);
-            byteBuf[byte_index + 1] = (byte) (decomp[short_index] & 0x00FF);
-        }
-        ++short_index; byte_index += 2;
+  public byte[] decompress(byte[] inputBuffer, CodecOptions options) throws FormatException {
+    if (!isInitialized) {
+      // load JNI library
+      loadLib(getJetrawLibraryName());
     }
-    return byteBuf;
-  }
 
+    // allocate decoded buffer and native call to encode buffer with Jetraw
+    short[] decodedBuffer = new short[options.width*options.height];
+    LOGGER.debug("[JETRAW] performing decoding.");
+    performDecoding(inputBuffer, inputBuffer.length, decodedBuffer, options.width*options.height);
+    
+    return convertShortArrayToByteArray(decodedBuffer, options);
+  }
 }

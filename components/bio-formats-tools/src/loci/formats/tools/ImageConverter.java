@@ -106,6 +106,7 @@ public final class ImageConverter {
   private String in = null, out = null;
   private String map = null;
   private String compression = null;
+  private String jetrawIdentifier = null;
   private boolean stitch = false, separate = false, merge = false, fill = false;
   private boolean bigtiff = false, group = true;
   private boolean nobigtiff = false;
@@ -165,6 +166,7 @@ public final class ImageConverter {
         else if (args[i].equals("-nobigtiff")) nobigtiff = true;
         else if (args[i].equals("-map")) map = args[++i];
         else if (args[i].equals("-compression")) compression = args[++i];
+        else if (args[i].equals("-jetraw-identifier")) jetrawIdentifier = args[++i];
         else if (args[i].equals("-nogroup")) group = false;
         else if (args[i].equals("-nolookup")) lookup = false;
         else if (args[i].equals("-autoscale")) autoscale = true;
@@ -342,6 +344,7 @@ public final class ImageConverter {
       "            -bigtiff: force BigTIFF files to be written",
       "          -nobigtiff: do not automatically switch to BigTIFF",
       "        -compression: specify the codec to use when saving images",
+      "  -jetraw-identifier: specify jetraw calibration identifier",
       "             -series: specify which image series to convert",
       "             -noflat: do not flatten subresolutions",
       "              -cache: cache the initialized reader",
@@ -630,12 +633,14 @@ public final class ImageConverter {
     if (writer instanceof TiffWriter) {
       ((TiffWriter) writer).setBigTiff(bigtiff);
       ((TiffWriter) writer).setCanDetectBigTiff(!nobigtiff);
+      ((TiffWriter) writer).setJetrawIdentifier(jetrawIdentifier);
     }
     else if (writer instanceof ImageWriter) {
       IFormatWriter w = ((ImageWriter) writer).getWriter(out);
       if (w instanceof TiffWriter) {
         ((TiffWriter) w).setBigTiff(bigtiff);
         ((TiffWriter) w).setCanDetectBigTiff(!nobigtiff);
+        ((TiffWriter) w).setJetrawIdentifier(jetrawIdentifier);
       }
     }
 
