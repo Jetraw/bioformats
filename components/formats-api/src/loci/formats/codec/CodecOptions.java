@@ -117,6 +117,11 @@ public class CodecOptions {
    */
   public boolean ycbcr;
 
+  /**
+   * Jetraw calibration identifier
+   */
+  public String jetrawIdentifier;
+
   // -- Constructors --
 
   /** Construct a new CodecOptions. */
@@ -142,6 +147,7 @@ public class CodecOptions {
       this.tileGridXOffset = options.tileGridXOffset;
       this.tileGridYOffset = options.tileGridYOffset;
       this.ycbcr = options.ycbcr;
+      this.jetrawIdentifier = options.jetrawIdentifier;
     }
   }
 
@@ -154,6 +160,7 @@ public class CodecOptions {
     options.interleaved = false;
     options.lossless = true;
     options.ycbcr = false;
+    options.jetrawIdentifier = null;
     return options;
   }
 
