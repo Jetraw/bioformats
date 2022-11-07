@@ -138,6 +138,11 @@ public final class ImageConverter {
   private boolean firstTile = true;
   private DynamicMetadataOptions options = new DynamicMetadataOptions();
 
+  // record paths that have been checked for overwriting
+  // this is mostly useful when "out" is a file name pattern
+  // that may be expanded into multiple actual files
+  private HashMap<String, Boolean> checkedPaths = new HashMap<String, Boolean>();
+
   // -- Constructor --
 
   public ImageConverter() { }
@@ -450,21 +455,9 @@ public final class ImageConverter {
     CommandLineTools.runUpgradeCheck(args);
 
     if (new Location(out).exists()) {
-      if (overwrite == null) {
-        LOGGER.warn("Output file {} exists.", out);
-        LOGGER.warn("Do you want to overwrite it? ([y]/n)");
-        BufferedReader r = new BufferedReader(
-          new InputStreamReader(System.in, Constants.ENCODING));
-        String choice = r.readLine().trim().toLowerCase();
-        overwrite = !choice.startsWith("n");
-      }
-      if (!overwrite) {
-        LOGGER.warn("Exiting; next time, please specify an output file that " +
-          "does not exist.");
+      boolean ok = overwriteCheck(out, false);
+      if (!ok) {
         return false;
-      }
-      else {
-        new Location(out).delete();
       }
     }
 
@@ -718,7 +711,13 @@ public final class ImageConverter {
           }
 
           String outputName = FormatTools.getFilename(q, i, reader, out, zeroPadding);
-          if (outputName.equals(FormatTools.getTileFilename(0, 0, 0, outputName))) {
+          String tileName = FormatTools.getTileFilename(0, 0, 0, outputName);
+
+          if (outputName.equals(tileName)) {
+            boolean ok = overwriteCheck(outputName, false);
+            if (!ok) {
+              return false;
+            }
             writer.setId(outputName);
             if (compression != null) writer.setCompression(compression);
           }
@@ -733,7 +732,12 @@ public final class ImageConverter {
             }
             if (saveTileWidth == 0 && saveTileHeight == 0) {
               // Using tile output name but not tiled reading
-              writer.setId(FormatTools.getTileFilename(0, 0, 0, outputName));
+
+              boolean ok = overwriteCheck(tileName, false);
+              if (!ok) {
+                return false;
+              }
+              writer.setId(tileName);
               if (compression != null) writer.setCompression(compression);
             }
           }
@@ -897,6 +901,8 @@ public final class ImageConverter {
           }
 
           writer.setMetadataRetrieve(retrieve);
+
+          overwriteCheck(tileName, true);
           writer.setId(tileName);
           if (compression != null) writer.setCompression(compression);
 
@@ -1136,6 +1142,38 @@ public final class ImageConverter {
     }
     return DataTools.safeMultiply64(width, height) >= DataTools.safeMultiply64(4096, 4096) ||
       saveTileWidth > 0 || saveTileHeight > 0;
+  }
+
+  private boolean overwriteCheck(String path, boolean throwOnExist) throws IOException {
+    if (checkedPaths.containsKey(path)) {
+      return checkedPaths.get(path);
+    }
+    if (!new Location(path).exists()) {
+      checkedPaths.put(path, true);
+      return true;
+    }
+    if (overwrite == null) {
+      LOGGER.warn("Output file {} exists.", path);
+      LOGGER.warn("Do you want to overwrite it? ([y]/n)");
+      BufferedReader r = new BufferedReader(
+        new InputStreamReader(System.in, Constants.ENCODING));
+      String choice = r.readLine().trim().toLowerCase();
+      overwrite = !choice.startsWith("n");
+    }
+    if (!overwrite) {
+      String msg = "Exiting; next time, please specify an output file that does not exist.";
+      checkedPaths.put(path, false);
+      if (throwOnExist) {
+        throw new IOException(msg);
+      }
+      LOGGER.warn(msg);
+      return false;
+    }
+    else {
+      new Location(path).delete();
+    }
+    checkedPaths.put(path, true);
+    return true;
   }
 
   // -- Main method --
