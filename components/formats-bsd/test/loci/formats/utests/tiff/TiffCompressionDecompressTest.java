@@ -181,4 +181,9 @@ public class TiffCompressionDecompressTest {
     assertNotNull(compression.decompress(DATA, options));
   }
 
+  @Test(expectedExceptions={ FormatException.class })
+  public void testJETRAW() throws FormatException, IOException {
+    TiffCompression compression = TiffCompression.JETRAW;
+    assertNotNull(compression.decompress(DATA, OPTIONS));
+  }
 }

@@ -44,6 +44,7 @@ import loci.formats.FormatException;
 import loci.formats.UnsupportedCompressionException;
 import loci.formats.codec.Codec;
 import loci.formats.codec.CodecOptions;
+import loci.formats.codec.JetrawCodec;
 import loci.formats.codec.JPEG2000Codec;
 import loci.formats.codec.JPEG2000CodecOptions;
 import loci.formats.codec.JPEGCodec;
@@ -195,6 +196,7 @@ public enum TiffCompression implements CodedEnum {
   },
   NIKON(34713, new NikonCodec(), "Nikon"),
   JPEGXR(22610, new JPEGXRCodec(), "JPEG-XR"),
+  JETRAW(48124, new JetrawCodec(), "Jetraw"),
   ZSTD(50000, new ZstdCodec(), "Zstandard");
 
   // -- Constants --
