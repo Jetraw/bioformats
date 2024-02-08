@@ -123,6 +123,11 @@ public class CodecOptions {
    * Default is false (use chroma subsampling).
    */
   public boolean disableChromaSubsampling;
+  
+  /**
+   * Jetraw calibration identifier
+   */
+  public String jetrawIdentifier;
 
   // -- Constructors --
 
@@ -150,6 +155,7 @@ public class CodecOptions {
       this.tileGridYOffset = options.tileGridYOffset;
       this.ycbcr = options.ycbcr;
       this.disableChromaSubsampling = options.disableChromaSubsampling;
+      this.jetrawIdentifier = options.jetrawIdentifier;
     }
   }
 
@@ -163,6 +169,7 @@ public class CodecOptions {
     options.lossless = true;
     options.ycbcr = false;
     options.disableChromaSubsampling = false;
+    options.jetrawIdentifier = null;
     return options;
   }
 

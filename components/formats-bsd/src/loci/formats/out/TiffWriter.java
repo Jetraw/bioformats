@@ -70,6 +70,8 @@ public class TiffWriter extends FormatWriter {
     CompressionType.JPEG.getCompression();
   public static final String COMPRESSION_ZLIB =
     CompressionType.ZLIB.getCompression();
+  public static final String COMPRESSION_JETRAW =
+    CompressionType.JETRAW.getCompression();
 
   private static final String[] BIG_TIFF_SUFFIXES = {"tf2", "tf8", "btf"};
 
@@ -83,6 +85,9 @@ public class TiffWriter extends FormatWriter {
 
   /** Whether or not BigTIFF can be used automatically. */
   protected boolean canDetectBigTiff = true;
+
+  /** Jetraw calibration identifier. */
+  protected String jetrawIdentifier;
 
   /** The TiffSaver that will do most of the writing. */
   protected TiffSaver tiffSaver;
@@ -124,6 +129,34 @@ public class TiffWriter extends FormatWriter {
     else if (compression.equals(COMPRESSION_ZLIB)) {
       compressType = TiffCompression.DEFLATE;
     }
+    else if (compression.equals(COMPRESSION_JETRAW)) {
+      MetadataRetrieve retrieve = getMetadataRetrieve();
+      // only allow Jetraw compression to 16-bit images, tile size matches image size and 
+      // jetraw calibration identifier is not null
+      if (FormatTools.getBytesPerPixel(retrieve.getPixelsType(series).toString()) == 2 &&
+          getSizeX() == getTileSizeX() &&
+          getSizeY() == getTileSizeY() &&
+          jetrawIdentifier != null) {
+        LOGGER.debug("[JETRAW] using Jetraw compression.");
+        compressType = TiffCompression.JETRAW;
+      } else {
+        LOGGER.debug("[JETRAW] using NO compression.");
+        if(FormatTools.getBytesPerPixel(retrieve.getPixelsType(series).toString()) != 2) {
+          LOGGER.debug("[JETRAW] Expected image pixel depth: 2-bytes" + " - current: "
+                       + FormatTools.getBytesPerPixel(retrieve.getPixelsType(series).toString()) + "-bytes");
+        }
+        if (getSizeX() != getTileSizeX() || getSizeY() != getTileSizeY()) {
+          LOGGER.debug("[JETRAW] Expected tile size to match image size. Expected tile size: "
+                     + "(x: " + getSizeX() + " y: " + getSizeY()
+                     + "\n[      ] Please set -tilex and -tiley in the command line tool accordingly.");
+        }
+        if (jetrawIdentifier == null) {
+          LOGGER.debug("[JETRAW] No Jetraw calibration identifier was set."
+                     + "\n[      ] Please set it using -jetraw-identifier in the command line tool.");
+        }
+        compressType = TiffCompression.UNCOMPRESSED;
+      }
+    }
     Object v = ifd.get(new Integer(IFD.COMPRESSION));
     if (v == null)
       ifd.put(new Integer(IFD.COMPRESSION), compressType.getCode());
@@ -144,7 +177,8 @@ public class TiffWriter extends FormatWriter {
       COMPRESSION_J2K,
       COMPRESSION_J2K_LOSSY,
       COMPRESSION_JPEG,
-      COMPRESSION_ZLIB
+      COMPRESSION_ZLIB,
+      COMPRESSION_JETRAW
     };
     isBigTiff = false;
   }
@@ -512,6 +546,13 @@ public class TiffWriter extends FormatWriter {
     canDetectBigTiff = detect;
   }
 
+  /**
+   * Sets Jetraw calibration identifier.
+   */
+  public void setJetrawIdentifier(String identifier) {
+    jetrawIdentifier = identifier;
+  }
+
   // -- Helper methods --
 
   protected void setupTiffSaver() throws IOException {
@@ -532,6 +573,7 @@ public class TiffWriter extends FormatWriter {
     tiffSaver.setLittleEndian(littleEndian);
     tiffSaver.setBigTiff(isBigTiff);
     tiffSaver.setCodecOptions(options);
+    tiffSaver.setJetrawIdentifier(jetrawIdentifier);
   }
 
   @Override

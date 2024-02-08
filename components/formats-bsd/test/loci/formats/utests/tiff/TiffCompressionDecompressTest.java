@@ -180,5 +180,4 @@ public class TiffCompressionDecompressTest {
     options.split = 1;
     assertNotNull(compression.decompress(DATA, options));
   }
-
 }

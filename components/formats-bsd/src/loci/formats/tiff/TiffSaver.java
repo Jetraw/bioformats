@@ -80,7 +80,10 @@ public class TiffSaver implements Closeable {
   /** Whether or not to write BigTIFF data. */
   private boolean bigTiff = false;
   private boolean sequentialWrite = false;
-  
+
+  /** Jetraw calibration identifier. */
+  private String jetrawIdentifier = null;
+
   /** Store tile offsets and original file pointer when writing sequentially. */
   private long[] sequentialTileOffsets;
   private long[] sequentialTileByteCounts;
@@ -171,6 +174,11 @@ public class TiffSaver implements Closeable {
   /** Sets whether or not BigTIFF data should be written. */
   public void setBigTiff(boolean bigTiff) {
     this.bigTiff = bigTiff;
+  }
+
+  /** Sets Jetraw calibration identifier */
+  public void setJetrawIdentifier(String identifier) {
+    this.jetrawIdentifier = identifier;
   }
 
   /** Returns whether or not we are writing little-endian data. */
@@ -424,7 +432,17 @@ public class TiffSaver implements Closeable {
       codecOptions.width = tileWidth;
       codecOptions.channels = interleaved ? nChannels : 1;
 
-      strips[strip] = compression.compress(strips[strip], codecOptions);
+      // check for Jetraw calibration identifier
+      if (compression.toString().equals("JETRAW")) {
+        codecOptions.jetrawIdentifier = this.jetrawIdentifier;
+        // FIXME: in the future add a check to identify if the identifier actually exists
+        if (codecOptions.jetrawIdentifier != null) {
+          strips[strip] = compression.compress(strips[strip], codecOptions);
+        }
+      } else if (!compression.toString().equals("UNCOMPRESSED")) {
+        strips[strip] = compression.compress(strips[strip], codecOptions);
+      }
+
       if (LOGGER.isDebugEnabled()) {
         LOGGER.debug(String.format("Compressed strip %d/%d length %d",
             strip + 1, nStrips, strips[strip].length));
