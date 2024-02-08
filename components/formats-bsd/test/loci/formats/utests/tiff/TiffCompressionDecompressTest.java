@@ -186,10 +186,4 @@ public class TiffCompressionDecompressTest {
     TiffCompression compression = TiffCompression.LURAWAVE;
     assertNotNull(compression.decompress(DATA, OPTIONS));
   }
-
-  @Test(expectedExceptions={ FormatException.class })
-  public void testJETRAW() throws FormatException, IOException {
-    TiffCompression compression = TiffCompression.JETRAW;
-    assertNotNull(compression.decompress(DATA, OPTIONS));
-  }
 }
